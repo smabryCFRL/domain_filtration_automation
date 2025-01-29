@@ -1,5 +1,5 @@
 import os.path
-import re 
+import re
 
 import dns.resolver
 from dotenv import load_dotenv
@@ -123,12 +123,17 @@ def main():
             valueInputOption = "RAW",
             body = {"values": filtered_rows}
         ).execute()
-
-        
-                        
+             
     except HttpError as err: 
         print(err)
-
+        filename = "failure.txt"
+        with open(filename, 'w') as file:
+            file.write(err)
+            file.close()
+    filename2 = "Success.txt"
+    with open(filename2, 'w') as file:
+        file.write("Success!")
+        file.close()
 
 if __name__ == "__main__":
   main()
