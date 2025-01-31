@@ -19,8 +19,6 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # The ID and range of a sample spreadsheet.
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-MAIN_SHEET_ID =  os.getenv("MAIN_SHEET_ID")
-DELETED_SHEET_ID = os.getenv("DELETED_SHEET_ID")
 MAIN_RANGE_NAME = "Active!A2:L"
 NXDOMAIN_RANGE_NAME = "Down!A2:L"
 def extract_domain(url):
@@ -33,7 +31,6 @@ def extract_domain(url):
 def get_dns_status(domain, rdtype='A', nameserver='8.8.8.8'):
     query = dns.message.make_query(domain, rdtype)
     try:
-        print(f"Querying DNS status for {domain}")
         response = dns.query.udp(query, nameserver, timeout=2)
         status_code = response.rcode()
         print(f"Domain{domain} - Status:{dns.rcode.to_text(status_code)}")
@@ -53,15 +50,15 @@ def main():
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if os.path.exists(r"C:\Users\smabry\Desktop\REPOS\domain_filtration_automation\token.json"):
+        creds = Credentials.from_authorized_user_file(r"C:\Users\smabry\Desktop\REPOS\domain_filtration_automation\token.json", SCOPES)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                "credentials.json", SCOPES
+                r"C:\Users\smabry\Desktop\REPOS\domain_filtration_automation\credentials.json", SCOPES
             )
             creds = flow.run_local_server(port=0)
     # Save the credentials for the next run
@@ -80,12 +77,25 @@ def main():
         )
         values = result.get("values", [])
 
+        result = (
+            sheet.values().get(
+                spreadsheetId=SPREADSHEET_ID, range=NXDOMAIN_RANGE_NAME
+            )
+            .execute()
+        )
+        
+        previous_dead_links = result.get("values", [])
+        
+        filtered_rows = []
+
+        for row in previous_dead_links:
+            filtered_rows.append(row)
+        
         if not values:
             print("No data found.")
             return
 
         valid_rows = []
-        filtered_rows = []
         for row in values:
             if not row:
                 continue
@@ -93,7 +103,7 @@ def main():
             if not domain:
                 continue
             status = get_dns_status(domain)
-            if status == "NOERROR":
+            if status != "NXDOMAIN":
                 valid_rows.append(row)
             else:
                 filtered_rows.append(row)
@@ -126,14 +136,7 @@ def main():
              
     except HttpError as err: 
         print(err)
-        filename = "failure.txt"
-        with open(filename, 'w') as file:
-            file.write(err)
-            file.close()
-    filename2 = "Success.txt"
-    with open(filename2, 'w') as file:
-        file.write("Success!")
-        file.close()
+        
 
 if __name__ == "__main__":
   main()
