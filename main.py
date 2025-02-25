@@ -19,22 +19,62 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # The ID and range of a sample spreadsheet.
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-MAIN_RANGE_NAME = "Active!A2:L"
-NXDOMAIN_RANGE_NAME = "Down!A2:L"
+MAIN_RANGE_NAME = "Active!A2:M"
+NXDOMAIN_RANGE_NAME = "Down!A2:M"
 def extract_domain(url):
-    if not url:
-        return
-    pattern = r"^(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?:/.*)?$"
-    match = re.search(pattern, url)
+    # if not url:
+    #     return
+    #pattern = r"^(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?:/.*)?$"
+    pattern = r'^(?:https?://)?(.*?)/?$'
+    match = re.match(pattern, url)
     return match.group(1) if match else None
 
-def get_dns_status(domain, rdtype='A', nameserver='8.8.8.8'):
-    query = dns.message.make_query(domain, rdtype)
+# def get_dns_status(domain, rdtype='A', nameserver='8.8.8.8'):
+#     query = dns.message.make_query(domain, rdtype)
+#     try:
+#         response = dns.query.udp(query, nameserver, timeout=2)
+#         status_code = response.rcode()
+#         print(f"Domain: {domain} - Status:{dns.rcode.to_text(status_code)}")
+#         return dns.rcode.to_text(status_code)
+#     except dns.exception.Timeout:
+#         print(f"DNS query timed out for {domain}")
+#         return None
+#     except Exception as e:
+#         print(f"DNS query unexpected error for {domain}: {e}")
+#         return None
+def get_dns_status(domain, nameserver='8.8.8.8'):
+    """
+    Perform DNS lookups for both A and AAAA records. 
+    Returns:
+        - 'NOERROR' if at least one record type returns NOERROR with a non-empty answer
+        - None if a timeout or any other error occurs, or if no valid A/AAAA record is found
+    """
     try:
-        response = dns.query.udp(query, nameserver, timeout=2)
-        status_code = response.rcode()
-        print(f"Domain{domain} - Status:{dns.rcode.to_text(status_code)}")
-        return dns.rcode.to_text(status_code)
+        # 1) Query for A record
+        query_a = dns.message.make_query(domain, 'A')
+        response_a = dns.query.udp(query_a, nameserver, timeout=2)
+        status_code_a = response_a.rcode()
+
+        # Check if NOERROR and we got at least one answer section
+        if status_code_a == dns.rcode.NOERROR and any(response_a.answer):
+            print(f"Domain: {domain} - Status: NOERROR - Found A record(s)")
+            return 'NOERROR'
+        
+        # 2) If we didn't find a valid A record, check AAAA
+        query_aaaa = dns.message.make_query(domain, 'AAAA')
+        response_aaaa = dns.query.udp(query_aaaa, nameserver, timeout=2)
+        status_code_aaaa = response_aaaa.rcode()
+
+        if status_code_aaaa == dns.rcode.NOERROR and any(response_aaaa.answer):
+            print(f"Domain: {domain} - Status: NOERROR - Found AAAA record(s)")
+            return 'NOERROR'
+
+        # If we reach here, either the status wasn't NOERROR or no IP records were found
+        print(f"Domain: {domain} - No valid A or AAAA records found ("
+              f"A status: {dns.rcode.to_text(status_code_a)}, "
+              f"AAAA status: {dns.rcode.to_text(status_code_aaaa)})")
+        return None
+
     except dns.exception.Timeout:
         print(f"DNS query timed out for {domain}")
         return None
@@ -100,10 +140,11 @@ def main():
             if not row:
                 continue
             domain = extract_domain(row[1].strip())
-            if not domain:
-                continue
+            
+            # if not domain:
+            #     continue
             status = get_dns_status(domain)
-            if status != "NXDOMAIN":
+            if status == "NOERROR":
                 valid_rows.append(row)
             else:
                 filtered_rows.append(row)
